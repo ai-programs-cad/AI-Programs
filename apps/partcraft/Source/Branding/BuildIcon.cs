@@ -1,0 +1,10 @@
+using System;
+using System.IO;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Collections.Generic;
+class BuildIcon {
+ static Bitmap Render(int size){var b=new Bitmap(size,size,PixelFormat.Format32bppArgb);using(var g=Graphics.FromImage(b)){g.SmoothingMode=SmoothingMode.AntiAlias;g.ScaleTransform(size/256f,size/256f);var round=new GraphicsPath();round.AddArc(8,8,80,80,180,90);round.AddArc(168,8,80,80,270,90);round.AddArc(168,168,80,80,0,90);round.AddArc(8,168,80,80,90,90);round.CloseFigure();using(var fill=new SolidBrush(Color.FromArgb(22,47,74)))g.FillPath(fill,round);var points=new[]{new PointF(49,193),new PointF(49,64),new PointF(143,64),new PointF(165,86),new PointF(207,86),new PointF(207,193),new PointF(49,193)};using(var pen=new Pen(Color.FromArgb(55,205,181),10){LineJoin=LineJoin.Round})g.DrawLines(pen,points);using(var f=new Font("Segoe UI",60,FontStyle.Bold,GraphicsUnit.Pixel))using(var brush=new SolidBrush(Color.White))g.DrawString("PC",f,brush,new RectangleF(50,99,158,82),new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center});using(var fill=new SolidBrush(Color.White)){g.FillRectangle(fill,41,56,16,16);g.FillRectangle(fill,199,185,16,16);}}return b;}
+ static void Main(string[] args){string root=args[0];Directory.CreateDirectory(root);var images=new List<byte[]>();int[] sizes={16,24,32,48,64,128,256};foreach(int size in sizes)using(var b=Render(size))using(var m=new MemoryStream()){b.Save(m,ImageFormat.Png);images.Add(m.ToArray());if(size==256)b.Save(Path.Combine(root,"PartCraft.png"),ImageFormat.Png);}using(var w=new BinaryWriter(File.Create(Path.Combine(root,"PartCraft.ico")))){w.Write((ushort)0);w.Write((ushort)1);w.Write((ushort)sizes.Length);int offset=6+16*sizes.Length;for(int i=0;i<sizes.Length;i++){w.Write((byte)(sizes[i]==256?0:sizes[i]));w.Write((byte)(sizes[i]==256?0:sizes[i]));w.Write((byte)0);w.Write((byte)0);w.Write((ushort)1);w.Write((ushort)32);w.Write(images[i].Length);w.Write(offset);offset+=images[i].Length;}foreach(var png in images)w.Write(png);}}
+}

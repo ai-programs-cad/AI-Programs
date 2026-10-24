@@ -1,0 +1,31 @@
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+public static class ManufacturingBendV13RegressionTests {
+    static BendBindingV06 Binding(){return new BendBindingV06{bodyName="Тело",configurationApiName="Default",flatPatternFeature="Flat-Pattern",modelPath="owned.SLDPRT",isolatedSolidCount=1,options=4,flatPatternBodyVerified=true,contextUnchanged=true};}
+    static string Spline(){return "0\nSPLINE\n8\n0\n70\n8\n71\n2\n72\n6\n73\n3\n40\n0\n40\n0\n40\n0\n40\n1\n40\n1\n40\n1\n10\n0\n20\n0\n30\n0\n10\n5\n20\n10\n30\n0\n10\n10\n20\n0\n30\n0\n";}
+    public static int Run(){
+        int inherited=ManufacturingNativeExportV05Tests.Run();var tests=new List<object>();int failed=0;
+        Action<string,Func<bool>> test=(name,f)=>{bool pass=false;string error=null;try{pass=f();}catch(Exception ex){error=ex.ToString();}if(!pass)failed++;tests.Add(new{name,passed=pass,error});};
+        string line=ManufacturingDxfV01.Line(new MPPoint(1,2),new MPPoint(3,2));string cut=ManufacturingDxfV01.Circle(new MPPoint(5,5),5);
+        test("Open native spline is supported in BEND",()=>{var r=ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(Spline()),null,Binding());return r.structureAccepted&&!r.closedCutContoursRequired&&!r.splineApproximationPerformed&&r.outputText.Contains("SPLINE");});
+        test("Same open spline is not accepted as CUT",()=>!ManufacturingDxfV04.Check(ManufacturingDxfV01.Wrap(Spline())).accepted);
+        test("BEND accepts independent open line",()=>ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(line),null,Binding()).structureAccepted);
+        test("Mixed native exact CUT and BEND subtract full cut multiset",()=>{var r=ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(cut+Spline()+line),ManufacturingDxfV01.Wrap(cut+Spline()),Binding());return r.structureAccepted&&r.isBendOnlyProven&&r.matchedCutRecords==2&&r.outputEntityCount==1&&!r.outputText.Contains("SPLINE");});
+        test("Spline bend remainder is preserved without approximation",()=>{var r=ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(cut+Spline()),ManufacturingDxfV01.Wrap(cut),Binding());return r.structureAccepted&&r.isBendOnlyProven&&r.outputEntityCount==1&&r.outputText.Contains(Spline());});
+        test("Whitespace in DXF group codes does not reject spline",()=>ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(Spline()).Replace("\n0\n","\n  0\n"),null,Binding()).structureAccepted);
+        test("Partial cut matching cannot claim pure bend content",()=>{var r=ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(cut+line),ManufacturingDxfV01.Wrap(cut+Spline()),Binding());return r.structureAccepted&&!r.isBendOnlyProven&&r.status=="NEEDS_REVIEW";});
+        test("Only CUT records is not a bend file",()=>!ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(cut),ManufacturingDxfV01.Wrap(cut),Binding()).structureAccepted);
+        test("Unbound multi-body export rejected",()=>{var b=Binding();b.isolatedSolidCount=2;return !ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(line),null,b).structureAccepted;});
+        test("Changed configuration binding rejected",()=>{var b=Binding();b.contextUnchanged=false;return !ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(line),null,b).structureAccepted;});
+        test("No metadata binding means no approval",()=>!ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(line),null,null).structureAccepted);
+        test("Malformed spline remains rejected without fitting",()=>!ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap(Spline().Replace("73\n3","73\n9")),null,Binding()).structureAccepted);
+        test("Text annotations cannot become native bend geometry",()=>!ManufacturingBendDxfV06.Validate(ManufacturingDxfV01.Wrap("0\nTEXT\n1\nHello\n"),null,Binding()).structureAccepted);
+        test("Workbook audit checks arbitrary actual body counts",()=>{var rows=new List<MPRow>{new MPRow{body="А",cutList="One",kind="TUBE",folderPhysicalCount=1,tube=new MPTube{maximumAxialSpanMm=10}},new MPRow{body="Б",cutList="Two",kind="PLATES",folderPhysicalCount=1}};string p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"work","workbook-v06-test-"+Guid.NewGuid().ToString("N")+".xlsx");ManufacturingExcelV05.Write(p,ProductionPackageEntry.Tables(rows,new List<object>()));return ManufacturingWorkbookAuditV06.Verify(p,rows)!=null;});
+        test("Workbook audit rejects quantity substitution",()=>{var rows=new List<MPRow>{new MPRow{body="A",cutList="One",kind="PLATES",folderPhysicalCount=1}};var t=ProductionPackageEntry.Tables(rows,new List<object>());t["PLATES"][1][2]=2;string p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"work","workbook-v06-badqty-"+Guid.NewGuid().ToString("N")+".xlsx");ManufacturingExcelV05.Write(p,t);try{ManufacturingWorkbookAuditV06.Verify(p,rows);return false;}catch(InvalidOperationException){return true;}});
+        test("Workbook audit rejects duplicate body rows",()=>{var rows=new List<MPRow>{new MPRow{body="A",cutList="One",kind="PLATES",folderPhysicalCount=1}};var t=ProductionPackageEntry.Tables(rows,new List<object>());t["PLATES"].Add(t["PLATES"][1]);string p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"work","workbook-v06-duplicate-"+Guid.NewGuid().ToString("N")+".xlsx");ManufacturingExcelV05.Write(p,t);try{ManufacturingWorkbookAuditV06.Verify(p,rows);return false;}catch(InvalidOperationException){return true;}});
+        test("Workbook audit rejects omitted actual body",()=>{var rows=new List<MPRow>{new MPRow{body="A",cutList="One",kind="PLATES",folderPhysicalCount=1}};var t=ProductionPackageEntry.Tables(rows,new List<object>());rows.Add(new MPRow{body="B",cutList="Two",kind="PLATES",folderPhysicalCount=1});string p=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"work","workbook-v06-missing-"+Guid.NewGuid().ToString("N")+".xlsx");ManufacturingExcelV05.Write(p,t);try{ManufacturingWorkbookAuditV06.Verify(p,rows);return false;}catch(InvalidOperationException){return true;}});
+        Console.WriteLine(CutListCoreV01.Json.Serialize(new{program="ManufacturingPackageV06",v06TestsPassed=tests.Count-failed,v06TestsFailed=failed,inheritedTestsPassed=inherited==0?69:0,tests,liveCOMExecuted=false,productionCertified=false}));return failed==0&&inherited==0?0:1;
+    }
+}

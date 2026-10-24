@@ -1,0 +1,7 @@
+using System;using System.IO;using System.Linq;using System.Collections.Generic;using System.Runtime.InteropServices;using System.Security.Cryptography;
+public static class DxfOnlyFolder {
+ [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)]static extern bool CreateDirectory(string path,IntPtr attributes);
+ public static string Reserve(string project){for(int i=0;i<100000;i++){string target=Path.Combine(project,i==0?"DXF":"DXF"+i);if(CreateDirectory(target,IntPtr.Zero))return target;int error=Marshal.GetLastWin32Error();if(error!=183&&error!=80)throw new IOException("Cannot create DXF folder: "+target+" error="+error);}throw new IOException("DXF numbering exhausted");}
+ static string Hash(string p){using(var f=File.OpenRead(p))using(var h=SHA256.Create())return BitConverter.ToString(h.ComputeHash(f));}
+ public static string Publish(string project,string input){var files=Directory.GetFiles(input,"*.dxf");if(files.Length==0)throw new Exception("No DXF to publish");string result=Reserve(project);var created=new List<Tuple<string,string>>();try{foreach(string file in files){string target=Path.Combine(result,Path.GetFileName(file));File.Copy(file,target,false);string hash=Hash(target);created.Add(Tuple.Create(target,hash));if(Hash(file)!=hash)throw new Exception("DXF copy verification failed");}return result;}catch{foreach(var item in created)if(File.Exists(item.Item1)&&Hash(item.Item1)==item.Item2)File.Delete(item.Item1);if(!Directory.EnumerateFileSystemEntries(result).Any())Directory.Delete(result,false);throw;}}
+}

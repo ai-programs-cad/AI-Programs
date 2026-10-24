@@ -1,0 +1,13 @@
+[Version]
+SW990001
+
+[Layers]
+0 = 7, 0
+UP = 5, 9
+Down = 1, 7
+
+[Entities]
+Geometry [0] = 0, 3, 0
+
+[Colors]
+

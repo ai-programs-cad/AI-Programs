@@ -1,0 +1,4 @@
+LIBRARY CADPreview.Shell
+EXPORTS
+ DllGetClassObject
+ DllCanUnloadNow
